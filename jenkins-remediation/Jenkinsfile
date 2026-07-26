@@ -1,0 +1,63 @@
+// Triggered remotely by the watcher service when a container has needed
+// 3+ restarts within 5 minutes — restarting alone isn't fixing it, so we
+// roll back to the last known-good image instead of retrying blindly.
+//
+// Set this up as a separate Jenkins job named "two-tier-remediation"
+// (Build Triggers -> Trigger builds remotely, with a token), and point
+// the watcher's JENKINS_URL / JENKINS_USER / JENKINS_TOKEN at it.
+
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'REASON', defaultValue: 'unspecified', description: 'Why the watcher escalated')
+    }
+
+    environment {
+        IMAGE_NAME = 'yourdockerhubusername/two-tier-web'
+    }
+
+    stages {
+        stage('Log escalation') {
+            steps {
+                echo "Escalation received. Reason: ${params.REASON}"
+            }
+        }
+
+        stage('Identify last stable tag') {
+            steps {
+                script {
+                    // Assumes tags are pushed as <build-number>; picks the second-most-recent
+                    // successful tag (the one before the currently-deployed, likely-broken one).
+                    env.STABLE_TAG = sh(
+                        script: "docker images ${IMAGE_NAME} --format '{{.Tag}}' | grep -E '^[0-9]+\$' | sort -rn | sed -n '2p'",
+                        returnStdout: true
+                    ).trim()
+                }
+                echo "Rolling back to tag: ${env.STABLE_TAG}"
+            }
+        }
+
+        stage('Rollback deploy') {
+            when { expression { return env.STABLE_TAG?.trim() } }
+            steps {
+                sh """
+                    docker compose stop web
+                    docker tag ${IMAGE_NAME}:${env.STABLE_TAG} ${IMAGE_NAME}:latest
+                    docker compose up -d web
+                """
+            }
+        }
+
+        stage('Verify recovery') {
+            steps {
+                sh 'sleep 10 && curl -f http://localhost:3000/health'
+            }
+        }
+    }
+
+    post {
+        success { echo "Rollback to ${env.STABLE_TAG} succeeded — app tier recovered." }
+        failure { echo 'Rollback failed. Manual intervention needed — check container logs.' }
+    }
+}

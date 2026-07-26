@@ -1,0 +1,80 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: two-tier-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: studentdb
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - two-tier-net
+
+  web:
+    build: ./app
+    container_name: two-tier-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: studentdb
+      DB_PORT: 3306
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - two-tier-net
+
+  watcher:
+    build: ./watcher
+    container_name: two-tier-watcher
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      TARGET_URL: http://web:3000/health
+      TARGET_CONTAINER: two-tier-web
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: studentdb
+      DB_PORT: 3306
+      POLL_INTERVAL_MS: 3000
+      FAILURE_THRESHOLD: 3
+      LATENCY_THRESHOLD_MS: 800
+      ESCALATION_THRESHOLD: 3
+      # Optional AI root-cause summaries — leave blank to use rule-based fallback
+      GROQ_API_KEY: ""
+      # Optional Jenkins escalation — leave blank to skip (falls back to plain restart)
+      JENKINS_URL: ""
+      JENKINS_USER: ""
+      JENKINS_TOKEN: ""
+      JENKINS_JOB: "two-tier-remediation"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
+    networks:
+      - two-tier-net
+
+volumes:
+  db_data:
+
+networks:
+  two-tier-net:
+    driver: bridge

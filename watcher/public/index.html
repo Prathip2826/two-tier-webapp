@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Self-Healing CI/CD | Live Monitor</title>
+<style>
+  :root {
+    --bg: #070b14;
+    --panel: #0d1424;
+    --panel-2: #101a30;
+    --border: #1c2740;
+    --text: #e6ecf7;
+    --muted: #7c8aa8;
+    --green: #22e3a0;
+    --green-glow: rgba(34, 227, 160, 0.35);
+    --red: #ff5470;
+    --red-glow: rgba(255, 84, 112, 0.35);
+    --amber: #ffb454;
+    --blue: #4f9cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background:
+      radial-gradient(circle at 20% -10%, rgba(79,156,255,0.08), transparent 40%),
+      radial-gradient(circle at 90% 10%, rgba(34,227,160,0.06), transparent 40%),
+      var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.8rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .title-block h1 {
+    font-size: 1.5rem;
+    margin: 0 0 0.2rem;
+    letter-spacing: 0.2px;
+  }
+  .title-block p { margin: 0; color: var(--muted); font-size: 0.85rem; }
+
+  .overall-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--muted);
+    box-shadow: 0 0 0 0 transparent;
+  }
+  .dot.healthy { background: var(--green); box-shadow: 0 0 10px 2px var(--green-glow); animation: pulse-green 1.8s infinite; }
+  .dot.unhealthy, .dot.recovering { background: var(--red); box-shadow: 0 0 10px 2px var(--red-glow); animation: pulse-red 1s infinite; }
+  @keyframes pulse-green { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  @keyframes pulse-red { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.4rem;
+  }
+  @media (max-width: 800px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.1rem 1.2rem;
+  }
+  .card .label { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 0.4rem; }
+  .card .value { font-size: 1.5rem; font-weight: 600; }
+  .card .value.green { color: var(--green); }
+  .card .value.red { color: var(--red); }
+  .card .value.amber { color: var(--amber); }
+
+  .panel {
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.4rem;
+    margin-bottom: 1.4rem;
+  }
+  .panel h2 { font-size: 0.95rem; margin: 0 0 1rem; font-weight: 600; }
+  .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+
+  .btn {
+    background: #182238;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.55rem 1rem;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+  .btn:hover { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79,156,255,0.15); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.danger:hover { border-color: var(--red); box-shadow: 0 0 0 3px rgba(255,84,112,0.15); }
+
+  canvas { max-height: 220px; }
+
+  .incident {
+    display: flex;
+    gap: 0.9rem;
+    padding: 0.9rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .incident:last-child { border-bottom: none; }
+  .incident-icon {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.9rem;
+  }
+  .incident-icon.down { background: rgba(255,84,112,0.15); color: var(--red); }
+  .incident-icon.latency { background: rgba(255,180,84,0.15); color: var(--amber); }
+  .incident-body { flex: 1; }
+  .incident-top { display: flex; justify-content: space-between; gap: 1rem; }
+  .incident-type { font-weight: 600; font-size: 0.88rem; }
+  .incident-time { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+  .incident-detail { color: var(--muted); font-size: 0.82rem; margin-top: 0.2rem; }
+  .incident-ai {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    padding: 0.5rem 0.7rem;
+    background: rgba(79,156,255,0.08);
+    border: 1px solid rgba(79,156,255,0.25);
+    border-radius: 8px;
+    color: #b9d4ff;
+  }
+  .badge-resolved {
+    display: inline-block;
+    margin-top: 0.4rem;
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(34,227,160,0.15);
+    color: var(--green);
+    border: 1px solid rgba(34,227,160,0.3);
+  }
+  .empty { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 2rem 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title-block">
+      <h1>Self-healing CI/CD monitor</h1>
+      <p>Live watcher for the two-tier app · auto-detects and auto-remediates</p>
+    </div>
+    <div style="display:flex; align-items:center; gap:0.7rem;">
+      <div class="overall-badge">
+        <span class="dot" id="overall-dot"></span>
+        <span id="overall-text">Connecting...</span>
+      </div>
+      <button class="btn danger" id="simulate-btn" onclick="simulateFailure()">Simulate failure</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">App tier status</div>
+      <div class="value" id="stat-status">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Avg latency</div>
+      <div class="value" id="stat-latency">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Consecutive failures</div>
+      <div class="value" id="stat-failures">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Auto-heals (5 min)</div>
+      <div class="value" id="stat-restarts">—</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Latency (last 20 checks)</h2>
+    <svg id="latencyChart" viewBox="0 0 900 200" preserveAspectRatio="none" style="width:100%; height:220px; display:block;"></svg>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Incident timeline</h2>
+      <span style="color: var(--muted); font-size: 0.75rem;" id="incident-count"></span>
+    </div>
+    <div id="incident-list"><div class="empty">No incidents yet — system healthy.</div></div>
+  </div>
+</div>
+
+<script>
+function renderLatencyChart(points) {
+  const svg = document.getElementById('latencyChart');
+  const valid = points.filter(p => p.ms !== null && p.ms !== undefined);
+
+  if (!valid.length) {
+    svg.innerHTML = '<text x="450" y="105" text-anchor="middle" fill="#7c8aa8" font-size="13">Waiting for data...</text>';
+    return;
+  }
+
+  const w = 900, h = 200, pad = 20;
+  const values = valid.map(p => p.ms);
+  const max = Math.max(...values, 10);
+  const stepX = (w - pad * 2) / Math.max(values.length - 1, 1);
+
+  const coords = values.map((v, i) => {
+    const x = pad + i * stepX;
+    const y = h - pad - (v / max) * (h - pad * 2);
+    return [x, y];
+  });
+
+  const linePath = coords.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const last = coords[coords.length - 1];
+  const first = coords[0];
+  const areaPath = `${linePath} L${last[0].toFixed(1)},${h - pad} L${first[0].toFixed(1)},${h - pad} Z`;
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="latGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#4f9cff" stop-opacity="0.35"/>
+        <stop offset="100%" stop-color="#4f9cff" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <path d="${areaPath}" fill="url(#latGrad)" stroke="none"/>
+    <path d="${linePath}" fill="none" stroke="#4f9cff" stroke-width="2"/>
+  `;
+}
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  const diff = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return diff + 's ago';
+  return Math.round(diff / 60) + 'm ago';
+}
+
+async function refreshStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+
+    const dot = document.getElementById('overall-dot');
+    const text = document.getElementById('overall-text');
+    dot.className = 'dot ' + data.status;
+    text.textContent = data.status === 'healthy' ? 'All systems healthy'
+      : data.status === 'recovering' ? 'Self-healing in progress...'
+      : data.status === 'unhealthy' ? 'Anomaly detected' : 'Starting up';
+
+    document.getElementById('stat-status').textContent = data.status;
+    document.getElementById('stat-status').className = 'value ' + (data.status === 'healthy' ? 'green' : data.status === 'unhealthy' ? 'red' : 'amber');
+    document.getElementById('stat-latency').textContent = data.avgLatencyMs ? data.avgLatencyMs + ' ms' : '—';
+    document.getElementById('stat-failures').textContent = data.consecutiveFailures;
+    document.getElementById('stat-failures').className = 'value ' + (data.consecutiveFailures > 0 ? 'red' : '');
+    document.getElementById('stat-restarts').textContent = data.restartsLast5Min;
+
+    const points = data.latencyHistory || [];
+    renderLatencyChart(points);
+
+    const btn = document.getElementById('simulate-btn');
+    btn.disabled = data.status !== 'healthy';
+  } catch (e) {
+    console.error('Status fetch failed:', e);
+    document.getElementById('overall-text').textContent = 'Watcher unreachable';
+  }
+}
+
+async function refreshIncidents() {
+  try {
+    const res = await fetch('/api/incidents');
+    const incidents = await res.json();
+    const list = document.getElementById('incident-list');
+    document.getElementById('incident-count').textContent = incidents.length + ' total';
+
+    if (!incidents.length) {
+      list.innerHTML = '<div class="empty">No incidents yet — system healthy.</div>';
+      return;
+    }
+
+    list.innerHTML = incidents.map(inc => `
+      <div class="incident">
+        <div class="incident-icon ${inc.type === 'DOWN' ? 'down' : 'latency'}">${inc.type === 'DOWN' ? '!' : '~'}</div>
+        <div class="incident-body">
+          <div class="incident-top">
+            <span class="incident-type">${inc.type.replace('_',' ')}</span>
+            <span class="incident-time">${timeAgo(inc.detected_at)}</span>
+          </div>
+          <div class="incident-detail">${inc.detail}</div>
+          ${inc.ai_summary ? `<div class="incident-ai">${inc.ai_summary}</div>` : ''}
+          ${inc.resolved_at ? '<div class="badge-resolved">Auto-resolved</div>' : ''}
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+async function simulateFailure() {
+  const btn = document.getElementById('simulate-btn');
+  btn.disabled = true;
+  await fetch('/api/simulate-failure', { method: 'POST' });
+}
+
+renderLatencyChart([]);
+refreshStatus();
+refreshIncidents();
+setInterval(refreshStatus, 3000);
+setInterval(refreshIncidents, 4000);
+</script>
+</body>
+</html>

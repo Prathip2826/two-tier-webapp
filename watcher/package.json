@@ -1,0 +1,14 @@
+{
+  "name": "two-tier-watcher",
+  "version": "1.0.0",
+  "description": "Self-healing watcher: monitors the app tier, detects anomalies, and auto-remediates",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mysql2": "^3.10.0",
+    "dockerode": "^4.0.2"
+  }
+}

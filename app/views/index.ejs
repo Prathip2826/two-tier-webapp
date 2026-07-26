@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Two-Tier App | Student Records</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin: 0;
+      padding: 2rem;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 { color: #38bdf8; }
+    .tag {
+      display: inline-block;
+      background: #1e293b;
+      color: #94a3b8;
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      margin-bottom: 1.5rem;
+    }
+    form {
+      background: #1e293b;
+      padding: 1.2rem;
+      border-radius: 10px;
+      display: grid;
+      gap: 0.7rem;
+      margin-bottom: 2rem;
+    }
+    input {
+      padding: 0.6rem;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    button {
+      background: #38bdf8;
+      color: #0f172a;
+      border: none;
+      padding: 0.6rem;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.6rem; border-bottom: 1px solid #1e293b; }
+    th { color: #38bdf8; }
+    .del-btn {
+      background: #ef4444;
+      color: white;
+      border: none;
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .error {
+      background: #7f1d1d;
+      color: #fecaca;
+      padding: 0.6rem;
+      border-radius: 6px;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Two-Tier Web App</h1>
+    <div class="tag">app tier: Node/Express &nbsp;|&nbsp; db tier: MySQL</div>
+
+    <% if (error) { %>
+      <div class="error"><%= error %></div>
+    <% } %>
+
+    <form action="/add" method="POST">
+      <input type="text" name="name" placeholder="Student name" required />
+      <input type="text" name="course" placeholder="Course" required />
+      <input type="email" name="email" placeholder="Email" required />
+      <button type="submit">Add Student</button>
+    </form>
+
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Course</th><th>Email</th><th></th></tr>
+      </thead>
+      <tbody>
+        <% students.forEach(function(s) { %>
+          <tr>
+            <td><%= s.id %></td>
+            <td><%= s.name %></td>
+            <td><%= s.course %></td>
+            <td><%= s.email %></td>
+            <td>
+              <form action="/delete/<%= s.id %>" method="POST" style="margin:0;">
+                <button class="del-btn" type="submit">Delete</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>
