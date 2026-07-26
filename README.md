@@ -1,175 +1,158 @@
-# Two-Tier Web App — Docker + Jenkins CI/CD
+# Self-Healing CI/CD Pipeline
 
-A minimal but complete **two-tier architecture** demo:
+**A two-tier app that detects its own failures and fixes them automatically — no human, no manual restart, no waiting.**
 
-- **Tier 1 — App tier**: Node.js + Express + EJS (student records CRUD UI)
-- **Tier 2 — DB tier**: MySQL 8
+Built on Docker + Jenkins + a watcher service that monitors the app in real time, restarts it the moment something breaks, escalates to a Jenkins-triggered rollback if restarts alone aren't fixing it, and explains what went wrong using an LLM.
 
-Both run as separate containers on a shared Docker network, orchestrated
-with Docker Compose. Jenkins automates build → test → image push → deploy.
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+![Jenkins](https://img.shields.io/badge/Jenkins-CI%2FCD-D24939?logo=jenkins&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-Express-339933?logo=node.js&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
+---
+
+## Demo
+
+<!-- Replace this with your recorded GIF: dashboard healthy → simulate failure → auto-heal -->
+`![demo](./demo.gif)`
+
+*Click "Simulate failure" on the live dashboard and watch it detect, self-heal, and log the incident — all in under 10 seconds.*
+
+---
+
+## Why this exists
+
+Most "two-tier Docker + Jenkins" tutorials stop at: push code → build image → deploy. That's a CI/CD pipeline, not a *reliable* system — if the app crashes at 3am, it stays down until someone notices.
+
+This project adds the missing piece: a **watcher** that never sleeps, catches failures within seconds, and fixes most of them without any human or Jenkins build in the loop at all.
+
+---
+
+## Architecture
+
+```
+┌─────────────┐      health checks       ┌─────────────┐
+│   watcher   │ ───────────────────────► │  web (app)  │
+│  (monitor + │                          │  Node/Express│
+│  self-heal) │ ◄─── restart via ────────│    :3000    │
+└──────┬──────┘      Docker API          └──────┬──────┘
+       │                                        │
+       │ logs incidents                         │ reads/writes
+       ▼                                        ▼
+┌─────────────────────────────────────────────────────┐
+│                    db (MySQL 8)                       │
+│         students table + incidents table              │
+└─────────────────────────────────────────────────────┘
+
+       │ escalates after 3+ restarts in 5 min
+       ▼
+┌─────────────────┐
+│  Jenkins job:    │  rolls back to last stable image
+│  remediation     │  instead of retrying blindly
+└─────────────────┘
+```
+
+**Two tiers, one extra brain:**
+- **App tier** — Node.js/Express, serves a student-records CRUD UI, exposes `/health`
+- **DB tier** — MySQL 8, stores app data + a full incident log
+- **Watcher** — polls `/health` every 3s, detects anomalies, restarts the app tier via the Docker Engine API, escalates to Jenkins on repeated failure, and serves a live dashboard
+
+---
+
+## How the self-healing actually works
+
+1. **Detect** — 3 consecutive failed health checks, or average latency over 800ms
+2. **Remediate (Level 1)** — restart the container directly via `dockerode`, no Jenkins build needed, recovery in seconds
+3. **Escalate (Level 2)** — if 3+ restarts happen within 5 minutes, restarting isn't the fix; the watcher instead triggers a Jenkins pipeline that rolls back to the last known-good image
+4. **Explain** — every incident gets a plain-English root-cause guess (via Groq's LLM API if configured, otherwise a rule-based fallback — works either way)
+5. **Log** — every detection, action, and outcome is written to MySQL and shown live on the dashboard
+
+---
+
+## Live dashboard
+
+Runs at `http://localhost:4000` alongside the app:
+- Real-time status with a pulsing health indicator
+- Live latency chart (pure SVG, no external chart library — nothing to break on a flaky network)
+- Full incident timeline with AI-generated root-cause notes
+- A **"Simulate failure"** button to demo the whole loop on demand, without waiting for a real crash
+
+---
+
+## Quick start
+
+```bash
+git clone https://github.com/Prathip2826/two-tier-webapp.git
+cd two-tier-webapp
+docker compose up -d --build
+```
+
+| Service | URL |
+|---|---|
+| App tier | http://localhost:3000 |
+| Self-healing dashboard | http://localhost:4000 |
+| MySQL (host-side, optional) | localhost:3307 |
+
+Stop everything: `docker compose down` (add `-v` to also wipe stored data).
+
+---
+
+## Project structure
 
 ```
 two-tier-webapp/
-├── app/
-│   ├── server.js        # Express app (app tier)
-│   ├── utils.js          # helper used by app + tests
-│   ├── views/index.ejs   # UI
+├── app/                    # App tier — Node/Express + MySQL
+│   ├── server.js
+│   ├── views/index.ejs
 │   ├── test/utils.test.js
-│   ├── package.json
-│   ├── Dockerfile        # app tier image
-│   └── .dockerignore
-├── init.sql               # DB schema + seed data (db tier)
-├── docker-compose.yml      # wires app tier + db tier together
-├── Jenkinsfile             # CI/CD pipeline
+│   └── Dockerfile
+├── watcher/                 # Self-healing watcher + dashboard
+│   ├── server.js             # detection + remediation logic
+│   ├── groq.js                # AI root-cause summaries (optional)
+│   ├── public/index.html       # live dashboard
+│   └── Dockerfile
+├── jenkins-remediation/
+│   └── Jenkinsfile            # rollback pipeline (Level 2 escalation)
+├── Jenkinsfile               # main build/test/deploy pipeline
+├── docker-compose.yml
+├── init.sql                  # schema: students + incidents tables
 └── README.md
 ```
 
 ---
 
-## 1. Run it locally with Docker
+## CI/CD pipeline (Jenkins)
 
-```bash
-cd two-tier-webapp
-docker compose up -d --build
+1. **Checkout** → 2. **Install deps** → 3. **Run tests** (Jest) → 4. **Build image** → 5. **Push to Docker Hub** → 6. **Deploy** → 7. **Smoke test**
+
+See `Jenkinsfile` for the full pipeline and `jenkins-remediation/Jenkinsfile` for the rollback job the watcher triggers on repeated failures.
+
+**Setup instructions** (installing Jenkins, Docker Hub credentials, webhook config) are in [`SETUP.md`](./SETUP.md).
+
+---
+
+## Enabling the optional AI layer
+
+Get a free key at [console.groq.com](https://console.groq.com), then set it in `docker-compose.yml`:
+```yaml
+watcher:
+  environment:
+    GROQ_API_KEY: "your-key-here"
 ```
-
-- App tier: http://localhost:3000
-- DB tier: MySQL on localhost:3306 (root / password)
-
-Check health:
-```bash
-curl http://localhost:3000/health
-```
-
-Stop everything:
-```bash
-docker compose down       # add -v to also wipe the db volume
-```
+Without a key, the watcher still works — it just uses a rule-based root-cause message instead of an LLM-generated one.
 
 ---
 
-## 2. Push this project to GitHub
+## What I'd add next
 
-```bash
-cd two-tier-webapp
-git init
-git add .
-git commit -m "Two-tier app: Docker + Jenkins CI/CD"
-git branch -M main
-git remote add origin https://github.com/Prathip2826/two-tier-webapp.git
-git push -u origin main
-```
+- Persist incident history beyond MySQL into a time-series store for longer-term trend analysis
+- Slack/email alerting alongside the dashboard
+- Kubernetes manifests as an alternative to Docker Compose for the deploy target
 
 ---
 
-## 3. Set up Jenkins (on a Linux VM/EC2/local machine)
+## Author
 
-**Install Jenkins + Docker on the same host** (simplest setup):
-
-```bash
-# Java (required by Jenkins)
-sudo apt update && sudo apt install -y openjdk-17-jdk
-
-# Jenkins
-curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key | sudo tee \
-  /usr/share/keyrings/jenkins-keyring.asc > /dev/null
-echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
-  https://pkg.jenkins.io/debian-stable binary/" | sudo tee \
-  /etc/apt/sources.list.d/jenkins.list > /dev/null
-sudo apt update && sudo apt install -y jenkins
-
-# Docker
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker jenkins
-sudo systemctl restart jenkins docker
-```
-
-Get the initial admin password: `sudo cat /var/lib/jenkins/secrets/initialAdminPassword`
-then visit `http://<server-ip>:8080` to finish setup.
-
-**Install plugins** (Manage Jenkins → Plugins):
-- Docker Pipeline
-- Git
-
-**Add Docker Hub credentials** (Manage Jenkins → Credentials → Global):
-- Kind: Username with password
-- Username: your Docker Hub username
-- Password: a Docker Hub access token (Docker Hub → Account Settings → Security)
-- ID: `dockerhub-creds` ← must match the ID used in the `Jenkinsfile`
-
-**Create the pipeline job**:
-1. New Item → Pipeline → name it `two-tier-webapp`
-2. Pipeline → Definition: "Pipeline script from SCM"
-3. SCM: Git → paste your repo URL → Branch: `main` → Script Path: `Jenkinsfile`
-4. Save → Build Now
-
-Before your first run, edit two lines in the `Jenkinsfile`:
-- `git url` → your actual GitHub repo URL
-- `IMAGE_NAME` → `yourdockerhubusername/two-tier-web`
-
----
-
-## 4. (Optional) Auto-trigger builds on every push
-
-GitHub repo → Settings → Webhooks → Add webhook:
-- Payload URL: `http://<jenkins-server-ip>:8080/github-webhook/`
-- Content type: `application/json`
-- Trigger on: "Just the push event"
-
-In the Jenkins job config, enable **"GitHub hook trigger for GITScm polling"**.
-
----
-
-## What the pipeline does
-
-1. **Checkout** — pulls latest code from GitHub
-2. **Install Dependencies** — `npm install` in `app/`
-3. **Run Tests** — Jest unit tests (`utils.test.js`)
-4. **Build Docker Image** — tags with build number + `latest`
-5. **Push to Docker Hub** — publishes the image
-6. **Deploy** — `docker compose up -d --build` (recreates app + db containers)
-7. **Smoke Test** — hits `/health` to confirm the app tier came up clean
-
----
-
-## 5. Self-healing watcher (new)
-
-A third container, `watcher`, continuously monitors the app tier and heals it
-automatically — no human, no Jenkins build needed for routine failures.
-
-**How it works:**
-1. Polls `web`'s `/health` endpoint every 3 seconds, tracking latency.
-2. **Anomaly detected** if either:
-   - 3 consecutive health checks fail (app is down), or
-   - average latency crosses 800ms (app is struggling)
-3. **Level 1 remediation**: restarts the `two-tier-web` container directly via
-   the Docker Engine API (`dockerode`). This is fast — seconds, not minutes.
-4. **Level 2 escalation**: if the app needed 3+ restarts within 5 minutes,
-   restarting isn't fixing the real problem — so the watcher instead calls
-   Jenkins remotely to run `jenkins-remediation/Jenkinsfile`, which rolls
-   back to the last known-good image tag.
-5. Every incident (detected, attempted fix, resolved or not) is logged to
-   the `incidents` table in MySQL, with an optional AI-generated root-cause
-   guess (via Groq — falls back to a rule-based message if no API key is set).
-6. A live dashboard at **http://localhost:4000** shows real-time status,
-   a latency chart, and the incident timeline. There's also a **"Simulate
-   failure"** button — use it for demos so you don't have to wait for a
-   real crash to show the self-healing off.
-
-**To enable the optional AI summaries:** get a free key at
-[console.groq.com](https://console.groq.com), then set `GROQ_API_KEY` in
-`docker-compose.yml` under the `watcher` service.
-
-**To enable Jenkins escalation:** create a second Jenkins job named
-`two-tier-remediation` pointing at `jenkins-remediation/Jenkinsfile`,
-enable "Trigger builds remotely" with a token, then fill in `JENKINS_URL`,
-`JENKINS_USER`, `JENKINS_TOKEN` in `docker-compose.yml`. If left blank, the
-watcher just does Level 1 restarts forever — still works, just no rollback.
-
----
-
-## Notes / next steps
-
-- Swap MySQL creds and secrets into Jenkins credentials / a `.env` file before using this beyond a demo — they're hardcoded here for clarity.
-- To deploy to a **remote** server instead of the Jenkins host itself, replace the `Deploy` stage with an `sshagent` block that SSHs into the target and runs `docker compose pull && docker compose up -d`.
-- For a Kubernetes version later (k8s Deployment + Service for each tier), this same image works as-is — just add manifests.
+**Prathip Kumar** — B.Tech AI & Data Science, Muthayammal Engineering College
+Google Student Ambassador · [GitHub](https://github.com/Prathip2826)
