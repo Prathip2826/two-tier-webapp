@@ -154,5 +154,5 @@ Without a key, the watcher still works — it just uses a rule-based root-cause 
 
 ## Author
 
-**Prathip Kumar** — B.Tech AI & Data Science, Muthayammal Engineering College
+**Prathip** — B.Tech AI & Data Science, Muthayammal Engineering College
 Google Student Ambassador · [GitHub](https://github.com/Prathip2826)
