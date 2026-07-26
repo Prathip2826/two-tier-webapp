@@ -14,8 +14,7 @@ Built on Docker + Jenkins + a watcher service that monitors the app in real time
 
 ## Demo
 
-<!-- Replace this with your recorded GIF: dashboard healthy → simulate failure → auto-heal -->
-`![demo](./demo.gif)`
+![Self Healing Demo](./demo.gif)
 
 *Click "Simulate failure" on the live dashboard and watch it detect, self-heal, and log the incident — all in under 10 seconds.*
 
