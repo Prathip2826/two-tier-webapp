@@ -10,11 +10,47 @@ Built on Docker + Jenkins + a watcher service that monitors the app in real time
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
+**⭐ If this is useful to you, star the repo — it helps others find it too.**
+
 ---
+
+## Features
+
+- 🔍 **Real-time health monitoring** — polls the app tier every 3 seconds
+- 🔁 **Auto-remediation** — restarts a failed container in seconds, zero human involvement
+- 📈 **Escalation logic** — repeated failures trigger a Jenkins-driven rollback instead of retrying blindly
+- 🧠 **AI-assisted diagnostics** — LLM-generated root-cause summaries for every incident (Groq, optional)
+- 📊 **Live dashboard** — dependency-free SVG charts, incident timeline, one-click failure simulation for demos
+- 🗄️ **Full audit trail** — every detection, action, and resolution logged to MySQL
+
+## Key results
+
+| Metric | Value |
+|---|---|
+| Failure detection time | ≤ 9 seconds (3 checks × 3s interval) |
+| Auto-recovery time | < 10 seconds (Level 1 restart) |
+| Human intervention required | None, for routine failures |
+| Escalation trigger | 3+ restarts within 5 minutes |
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| App tier | Node.js, Express, EJS |
+| Database tier | MySQL 8 |
+| Watcher / self-healing | Node.js, Express, `dockerode` (Docker Engine API) |
+| AI diagnostics | Groq (Llama 3.1), optional |
+| CI/CD | Jenkins (declarative pipelines) |
+| Containerization | Docker, Docker Compose |
+| Testing | Jest |
+
+
 
 ## Demo
 
-![Self Healing Demo](./demo.gif)
+![Self-healing demo](./demo.gif)
 
 *Click "Simulate failure" on the live dashboard and watch it detect, self-heal, and log the incident — all in under 10 seconds.*
 
@@ -66,6 +102,15 @@ This project adds the missing piece: a **watcher** that never sleeps, catches fa
 3. **Escalate (Level 2)** — if 3+ restarts happen within 5 minutes, restarting isn't the fix; the watcher instead triggers a Jenkins pipeline that rolls back to the last known-good image
 4. **Explain** — every incident gets a plain-English root-cause guess (via Groq's LLM API if configured, otherwise a rule-based fallback — works either way)
 5. **Log** — every detection, action, and outcome is written to MySQL and shown live on the dashboard
+
+**Tunable via environment variables** in `docker-compose.yml`:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `POLL_INTERVAL_MS` | 3000 | How often the watcher checks `/health` |
+| `FAILURE_THRESHOLD` | 3 | Consecutive failed checks before triggering remediation |
+| `LATENCY_THRESHOLD_MS` | 800 | Average latency (ms) that counts as an anomaly |
+| `ESCALATION_THRESHOLD` | 3 | Restarts within 5 min before escalating to Jenkins |
 
 ---
 
@@ -151,7 +196,13 @@ Without a key, the watcher still works — it just uses a rule-based root-cause 
 
 ---
 
+## Skills demonstrated
+
+Container orchestration · CI/CD pipeline design · Docker Engine API integration · anomaly detection & thresholding · incident logging & audit trails · LLM API integration · escalation/rollback strategy design · full-stack monitoring dashboard (no external chart dependency)
+
+---
+
 ## Author
 
-**Prathip** — B.Tech AI & Data Science, Muthayammal Engineering College
+**Prathip Kumar** — B.Tech AI & Data Science, Muthayammal Engineering College
 Google Student Ambassador · [GitHub](https://github.com/Prathip2826)
